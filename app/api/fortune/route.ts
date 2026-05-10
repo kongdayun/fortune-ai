@@ -138,9 +138,10 @@ function buildUserText(category: string, inputs: Record<string, string>): string
       lines.push(`이름: ${inputs.name || '비공개'}`);
       lines.push(`생년월일: ${inputs.birthYear}년 ${inputs.birthMonth} ${inputs.birthDay}일`);
       lines.push(`출생 시간: ${inputs.birthHour || '모름'}`);
+      lines.push(`출생 지역: ${inputs.birthPlace || '서울'}`);
       lines.push(`성별: ${inputs.gender}`);
       lines.push(`달력: ${inputs.calendar || '양력'}`);
-      lines.push('\n위 정보를 바탕으로 사주팔자를 분석해주세요.');
+      lines.push('\n위 정보를 바탕으로 프롬프트의 모든 계산 규칙과 출력 형식을 정확히 따라 사주팔자 완전 분석을 수행하세요. 계산 과정을 단계별로 검토하고, 출력 형식 템플릿을 빠짐없이 채워주세요.');
       break;
     case 'gungham':
       lines.push(`[나] 이름: ${inputs.name1}, 생년월일: ${inputs.birth1}, 성별: ${inputs.gender1}`);
