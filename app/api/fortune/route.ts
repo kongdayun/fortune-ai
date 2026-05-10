@@ -1,17 +1,6 @@
 export const runtime = 'edge';
 
-import Anthropic from '@anthropic-ai/sdk';
-import type { MessageParam } from '@anthropic-ai/sdk/resources/messages';
 import { CATEGORIES } from '@/lib/categories';
-
-const client = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
-
-const VALID_MIME = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'] as const;
-type ValidMime = typeof VALID_MIME[number];
-
-function isValidMime(m: string): m is ValidMime {
-  return (VALID_MIME as readonly string[]).includes(m);
-}
 
 export async function POST(req: Request) {
   try {
@@ -25,43 +14,73 @@ export async function POST(req: Request) {
 
     const userText = buildUserText(category, inputs);
 
-    const content: MessageParam['content'] = [];
+    type ContentBlock =
+      | { type: 'text'; text: string }
+      | { type: 'image'; source: { type: 'base64'; media_type: string; data: string } };
+
+    const content: ContentBlock[] = [];
 
     if (imageBase64 && (category === 'gwansang' || category === 'palm')) {
-      const mime: ValidMime = isValidMime(imageMime) ? imageMime : 'image/jpeg';
-      content.push({
-        type: 'image',
-        source: { type: 'base64', media_type: mime, data: imageBase64 },
-      });
+      const mime = ['image/jpeg','image/png','image/gif','image/webp'].includes(imageMime)
+        ? imageMime : 'image/jpeg';
+      content.push({ type: 'image', source: { type: 'base64', media_type: mime, data: imageBase64 } });
     }
     content.push({ type: 'text', text: userText });
 
-    const stream = await client.messages.stream({
-      model: 'claude-sonnet-4-6',
-      max_tokens: 2500,
-      system: cat.systemPrompt,
-      messages: [{ role: 'user', content }],
+    const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.ANTHROPIC_API_KEY ?? '',
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 2500,
+        stream: true,
+        system: cat.systemPrompt,
+        messages: [{ role: 'user', content }],
+      }),
     });
 
+    if (!anthropicRes.ok) {
+      const err = await anthropicRes.text();
+      return Response.json({ error: `Anthropic API 오류: ${err}` }, { status: 500 });
+    }
+
+    // Transform Anthropic SSE → our SSE format
     const encoder = new TextEncoder();
-    const readable = new ReadableStream({
-      async start(controller) {
-        try {
-          for await (const chunk of stream) {
-            if (
-              chunk.type === 'content_block_delta' &&
-              chunk.delta.type === 'text_delta'
-            ) {
-              const data = JSON.stringify({ text: chunk.delta.text });
-              controller.enqueue(encoder.encode(`data: ${data}\n\n`));
-            }
+    const decoder = new TextDecoder();
+
+    const { readable, writable } = new TransformStream<Uint8Array, Uint8Array>({
+      transform(chunk, controller) {
+        const text = decoder.decode(chunk, { stream: true });
+        for (const line of text.split('\n')) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6).trim();
+          if (data === '[DONE]') {
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            return;
           }
-          controller.enqueue(encoder.encode('data: [DONE]\n\n'));
-        } finally {
-          controller.close();
+          try {
+            const parsed = JSON.parse(data);
+            if (
+              parsed.type === 'content_block_delta' &&
+              parsed.delta?.type === 'text_delta' &&
+              parsed.delta?.text
+            ) {
+              const out = JSON.stringify({ text: parsed.delta.text });
+              controller.enqueue(encoder.encode(`data: ${out}\n\n`));
+            }
+          } catch { /* skip malformed lines */ }
         }
       },
+      flush(controller) {
+        controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      },
     });
+
+    anthropicRes.body!.pipeTo(writable);
 
     return new Response(readable, {
       headers: {
@@ -88,14 +107,12 @@ function buildUserText(category: string, inputs: Record<string, string>): string
       lines.push(`달력: ${inputs.calendar || '양력'}`);
       lines.push('\n위 정보를 바탕으로 사주팔자를 분석해주세요.');
       break;
-
     case 'gungham':
       lines.push(`[나] 이름: ${inputs.name1}, 생년월일: ${inputs.birth1}, 성별: ${inputs.gender1}`);
       lines.push(`[상대] 이름: ${inputs.name2}, 생년월일: ${inputs.birth2}, 성별: ${inputs.gender2}`);
       lines.push(`관계: ${inputs.relation || '연인/배우자'}`);
       lines.push('\n두 사람의 궁합을 분석해주세요.');
       break;
-
     case 'astrology':
       lines.push(`이름: ${inputs.name || '비공개'}`);
       lines.push(`생년월일: ${inputs.birthDate}`);
@@ -104,36 +121,32 @@ function buildUserText(category: string, inputs: Record<string, string>): string
       lines.push(`관심 분야: ${inputs.focus || '전체 운세'}`);
       lines.push('\n위 정보로 점성술 분석을 해주세요.');
       break;
-
     case 'tarot':
       lines.push(`질문/고민: ${inputs.question}`);
       lines.push(`분야: ${inputs.area || '인생 전반'}`);
+      if (inputs.selectedCards) lines.push(`선택한 카드: ${inputs.selectedCards}`);
       lines.push('\n이 질문에 맞는 타로 카드 3장을 뽑고 해석해주세요.');
       break;
-
     case 'gwansang':
       lines.push(`성별: ${inputs.gender}`);
       if (inputs.name) lines.push(`이름: ${inputs.name}`);
       if (inputs.age) lines.push(`나이: ${inputs.age}세`);
       if (inputs.features) lines.push(`얼굴 특징: ${inputs.features}`);
-      lines.push('\n관상을 분석해주세요. 사진이 있다면 사진을 보고, 없다면 설명된 특징으로 분석해주세요.');
+      lines.push('\n관상을 분석해주세요.');
       break;
-
     case 'palm':
       lines.push(`손: ${inputs.hand}`);
       lines.push(`성별: ${inputs.gender}`);
       if (inputs.age) lines.push(`나이: ${inputs.age}세`);
       if (inputs.palmDesc) lines.push(`손금 특징: ${inputs.palmDesc}`);
-      lines.push('\n손금을 분석해주세요. 사진이 있다면 사진을 보고, 없다면 설명된 특징으로 분석해주세요.');
+      lines.push('\n손금을 분석해주세요.');
       break;
-
     case 'dream':
       lines.push(`꿈 내용: ${inputs.dreamContent}`);
       lines.push(`꿈의 느낌: ${inputs.feeling}`);
       if (inputs.currentSituation) lines.push(`현재 상황: ${inputs.currentSituation}`);
       lines.push('\n이 꿈을 해몽해주세요.');
       break;
-
     case 'jami':
       lines.push(`이름: ${inputs.name || '비공개'}`);
       lines.push(`생년월일: ${inputs.birthYear}년 ${inputs.birthMonth} ${inputs.birthDay}일`);
@@ -142,7 +155,6 @@ function buildUserText(category: string, inputs: Record<string, string>): string
       lines.push(`달력: ${inputs.calendar || '음력'}`);
       lines.push('\n자미두수 명반을 분석해주세요.');
       break;
-
     case 'fortune':
       lines.push(`이름: ${inputs.name || '비공개'}`);
       lines.push(`생년월일: ${inputs.birthDate}`);
@@ -151,19 +163,13 @@ function buildUserText(category: string, inputs: Record<string, string>): string
       lines.push(`운세 기간: ${inputs.period || '오늘의 운세'}`);
       lines.push('\n운세를 분석해주세요.');
       break;
-
     case 'cookie':
-      if (inputs.wish) {
-        lines.push(`현재 고민/소원: ${inputs.wish}`);
-      } else {
-        lines.push('특별한 질문 없이 오늘의 포춘쿠키 메시지를 요청합니다.');
-      }
+      lines.push(inputs.wish
+        ? `현재 고민/소원: ${inputs.wish}`
+        : '오늘의 포춘쿠키 메시지를 요청합니다.');
       break;
-
     default:
-      Object.entries(inputs).forEach(([k, v]) => {
-        if (v) lines.push(`${k}: ${v}`);
-      });
+      Object.entries(inputs).forEach(([k, v]) => { if (v) lines.push(`${k}: ${v}`); });
   }
 
   return lines.join('\n');
