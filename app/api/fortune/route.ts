@@ -1,6 +1,7 @@
 export const runtime = 'edge';
 
 import { CATEGORIES } from '@/lib/categories';
+import { getFallback } from '@/lib/fallbacks';
 
 export async function POST(req: Request) {
   try {
@@ -44,8 +45,8 @@ export async function POST(req: Request) {
     });
 
     if (!anthropicRes.ok) {
-      const err = await anthropicRes.text();
-      return Response.json({ error: `Anthropic API 오류: ${err}` }, { status: 500 });
+      // API 실패 시 유형별 DB 폴백으로 스트리밍
+      return streamFallback(category, inputs);
     }
 
     // Transform Anthropic SSE → our SSE format
@@ -91,8 +92,42 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     console.error(err);
-    return Response.json({ error: 'AI 분석 중 오류가 발생했습니다.' }, { status: 500 });
+    // 예외 발생 시에도 폴백으로 결과 반환
+    try {
+      const body2 = await new Response((err as Response)?.body).json().catch(() => ({}));
+      return streamFallback(body2?.category ?? 'cookie', body2?.inputs ?? {});
+    } catch {
+      return streamFallback('cookie', {});
+    }
   }
+}
+
+// 폴백 DB를 청크 단위로 스트리밍
+function streamFallback(category: string, inputs: Record<string, string>): Response {
+  const text = getFallback(category, inputs);
+  const encoder = new TextEncoder();
+  const CHUNK = 8; // 글자 단위 스트리밍
+
+  const readable = new ReadableStream({
+    async start(controller) {
+      for (let i = 0; i < text.length; i += CHUNK) {
+        const slice = text.slice(i, i + CHUNK);
+        const data = JSON.stringify({ text: slice });
+        controller.enqueue(encoder.encode(`data: ${data}\n\n`));
+        await new Promise(r => setTimeout(r, 18));
+      }
+      controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+      controller.close();
+    },
+  });
+
+  return new Response(readable, {
+    headers: {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+    },
+  });
 }
 
 function buildUserText(category: string, inputs: Record<string, string>): string {
