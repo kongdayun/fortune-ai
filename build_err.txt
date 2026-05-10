@@ -1,0 +1,22 @@
+Failed to type check.
+
+./app/api/fortune/route.ts:40:34
+Type error: Type 'ContentBlock[]' is not assignable to type 'string | ContentBlockParam[]'.
+  Type 'ContentBlock[]' is not assignable to type 'ContentBlockParam[]'.
+    Type 'ContentBlock' is not assignable to type 'ContentBlockParam'.
+      Type '{ type: "image"; source: { type: "base64"; media_type: string; data: string; }; }' is not assignable to type 'ContentBlockParam'.
+        Type '{ type: "image"; source: { type: "base64"; media_type: string; data: string; }; }' is not assignable to type 'ImageBlockParam'.
+          Types of property 'source' are incompatible.
+            Type '{ type: "base64"; media_type: string; data: string; }' is not assignable to type 'Base64ImageSource | URLImageSource'.
+              Type '{ type: "base64"; media_type: string; data: string; }' is not assignable to type 'Base64ImageSource'.
+                Types of property 'media_type' are incompatible.
+                  Type 'string' is not assignable to type '"image/jpeg" | "image/png" | "image/gif" | "image/webp"'.
+
+  [90m38 |[0m       max_tokens: [35m2500[0m,
+  [90m39 |[0m       system: cat.systemPrompt,
+[31m[1m>[0m [90m40 |[0m       messages: [{ role: [32m'user'[0m, content }],
+  [90m   |[0m                                  [31m[1m^[0m
+  [90m41 |[0m     });
+  [90m42 |[0m
+  [90m43 |[0m     [36mconst[0m encoder = [36mnew[0m [33mTextEncoder[0m();
+Next.js build worker exited with code: 1 and signal: null

@@ -1,0 +1,24 @@
+▲ Next.js 16.2.6 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://172.30.1.12:3000
+- Environments: .env.local
+✓ Ready in 975ms
+
+○ Compiling / ...
+ GET / 200 in 9.1s (next.js: 7.1s, application-code: 1975ms)
+ GET /fortune 200 in 2.6s (next.js: 2.6s, application-code: 58ms)
+ GET /fortune 200 in 65ms (next.js: 26ms, application-code: 40ms)
+ GET /saju 200 in 58ms (next.js: 21ms, application-code: 37ms)
+ POST /api/fortune 200 in 1152ms (next.js: 1122ms, application-code: 31ms)
+ POST /api/fortune 200 in 15ms (next.js: 4ms, application-code: 11ms)
+ POST /api/fortune 200 in 16ms (next.js: 6ms, application-code: 10ms)
+ POST /api/fortune 200 in 25ms (next.js: 11ms, application-code: 13ms)
+ POST /api/fortune 200 in 15ms (next.js: 4ms, application-code: 11ms)
+ POST /api/fortune 200 in 14ms (next.js: 6ms, application-code: 9ms)
+ POST /api/fortune 200 in 15ms (next.js: 3ms, application-code: 12ms)
+ GET /saju 200 in 138ms (next.js: 91ms, application-code: 48ms)
+ GET /saju 200 in 57ms (next.js: 12ms, application-code: 45ms)
+ GET /saju 200 in 89ms (next.js: 8ms, application-code: 81ms)
+ GET /saju 200 in 64ms (next.js: 6ms, application-code: 58ms)
+ GET /saju 200 in 83ms (next.js: 10ms, application-code: 73ms)
+ GET /saju 200 in 86ms (next.js: 45ms, application-code: 41ms)
