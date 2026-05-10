@@ -22,3 +22,4 @@
  GET /saju 200 in 64ms (next.js: 6ms, application-code: 58ms)
  GET /saju 200 in 83ms (next.js: 10ms, application-code: 73ms)
  GET /saju 200 in 86ms (next.js: 45ms, application-code: 41ms)
+[?25h
